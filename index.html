@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>AI Background Remover WebUI</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="webres/photoswipe.css">
+    <link rel="stylesheet" href="webres/photoswipe-dynamic-caption-plugin.css">
+</head>
+
+<body style="background-color:#191919">
+    <h1 style="text-align:center;color:#ffd25a">Image Background Remover</h1>
+    <img src="mask.png" id="maskimg" style="visibility:hidden">
+
+
+    <center style="background-color:#ffd25a;height:500px">
+        <div style="padding-top:100px;padding-left: 150px;" class="pswp-gallery pswp-gallery--single-column"
+            id="gallery"></div>
+        <center>
+
+
+            <img src="predimg.png" id="predimg" style="visibility:hidden">
+
+            <button onclick="trimPic()" style="border-radius: 10px; background-color:#191919; color:#ffd25a">Trim
+                Borders</button>
+            <div style="display:flex">
+
+                <canvas style="width:500px;height:384px;visibility:hidden" id="maskcanvas"></canvas>
+                <canvas style="width:500px;height:384px;visibility:hidden" id="imgcanvas"></canvas>
+                <canvas style="width:500px;height:384px;visibility:hidden" id="finalcanvas"></canvas>
+            
+            </div>
+
+                    <script>
+                        // Getting images
+                        var maskimg = document.getElementById("maskimg");
+                        var img = document.getElementById("predimg");
+
+                        var maskcanvas;
+                        var maskctx;
+                        var imgcanvas;
+                        var imgctx;
+
+                        //Full image data for both images
+                        var imgpixels;
+                        var maskpixels;
+
+                        //Pixel containers
+                        var rgbmask = [];
+                        var rgbimg = [];
+
+                        //Boolean transparency mask
+                        var boolmask = [];
+
+                        //Trimming toggle
+                        var trim = false;
+
+                        maskimg.onload = function () {
+                            //Getting canvas
+                            maskcanvas = document.getElementById("maskcanvas");
+                            // Getting context
+                            maskctx = maskcanvas.getContext("2d");
+                            //Draw Image
+                            maskctx.drawImage(maskimg, 0, 0);
+
+                        }
+
+                        img.onload = function () {
+                            imgcanvas = document.getElementById("imgcanvas");
+
+                            imgctx = imgcanvas.getContext("2d");
+
+                            imgctx.drawImage(img, 0, 0);
+
+                            //Using timeout hack to defer execute
+                            setTimeout(() => {
+                                getData();
+                            }, 0);
+
+
+                        }
+
+                        function trimPic() {
+                            //Resetting global variables to trim picture
+                            imgpixels = [];
+                            maskpixels = [];
+                            rgbmask = [];
+                            rgbimg = [];
+                            boolmask = [];
+                            document.getElementById("gallery").innerHTML = "";
+                            trim = true;
+                            getData();
+                        }
+
+                        function getData() {
+                            maskpixels = maskctx.getImageData(0, 0, maskimg.width, maskimg.height);
+                            imgpixels = imgctx.getImageData(0, 0, img.width, img.height);
+                            //Single pixel for mask 
+                            let mpixel = [];
+                            // Sing pixel data for img 
+                            let ipixel = [];
+
+                            for (let i = 0; i < maskpixels.data.length; i += 4) {
+                                mpixel.push(maskpixels.data[i]);
+                                mpixel.push(maskpixels.data[i + 1]);
+                                mpixel.push(maskpixels.data[i + 2]);
+                                mpixel.push(maskpixels.data[i + 3]);
+                                rgbmask.push(mpixel);
+                                mpixel = [];
+                            }
+
+                            for (let i = 0; i < imgpixels.data.length; i += 4) {
+                                ipixel.push(imgpixels.data[i]);
+                                ipixel.push(imgpixels.data[i + 1]);
+                                ipixel.push(imgpixels.data[i + 2]);
+                                ipixel.push(imgpixels.data[i + 3]);
+                                rgbimg.push(ipixel);
+                                ipixel = [];
+                            }
+                            //console.log(rgbmask,rgbmask.length);
+                            //console.log(rgbimg,rgbimg.length);
+
+                            //Get transparency mask after data
+                            getTransparencyMask();
+                            removeBG();
+                        }
+
+                        function getTransparencyMask() {
+
+                            rgbmask.forEach(function (pixel) {
+                                //Checking first color of the pixel (127,127,127,255)   
+                                if (pixel[0] === 127) {
+                                    boolmask.push(false)
+                                //If trim is true clear white parts too
+                                } else if (trim === true && pixel[0] === 255) {
+                                    boolmask.push(false)
+                                } else {
+                                    boolmask.push(true)
+                                }
+                            })
+
+                            console.log(boolmask, boolmask.length)
+
+                        }
+
+
+                        function removeBG() {
+                            let newrgba = [];
+                            //Leave pixels same for true transparent for false
+                            rgbimg.forEach(function (pixel, index) {
+                                if (boolmask[index]) {
+                                    newrgba.push(pixel[0]) //R
+                                    newrgba.push(pixel[1]) //G
+                                    newrgba.push(pixel[2]) //B
+                                    newrgba.push(pixel[3]) //A
+                                } else {
+                                    newrgba.push(0);
+                                    newrgba.push(0);
+                                    newrgba.push(0);
+                                    newrgba.push(0);
+                                }
+                            })
+
+                            console.log(newrgba, newrgba.length)
+                            //Next step
+                            Repack(newrgba);
+                        }
+
+
+                        //Function to repack data as PNG (RGBA)
+                        function Repack(data) {
+                            //Get context of final canvas
+                            let ctx = document.getElementById("finalcanvas").getContext("2d");
+                            //Create a new unsigned int clamped array for pixels
+                            let uintArr = new Uint8ClampedArray(data);
+                            //Convert array into image data object
+                            let imgData2 = new ImageData(uintArr, img.width, img.height);
+
+                            /*TODO:Insert Big Canvas For REPORT RESULTS*/
+
+
+                            //Write image data into canvas
+                            ctx.putImageData(imgData2, 0, 0);
+                            //Convert canvas content into image data and render images
+                            appendImage(document.getElementById("imgcanvas").toDataURL(), "Original Image")
+                            appendImage(document.getElementById("maskcanvas").toDataURL(), "AI prediction mask")
+                            appendImage(document.getElementById("finalcanvas").toDataURL(),
+                                "Final image after processing")
+
+
+                        }
+
+                    </script>
+                    <script>
+                        // Append image to gallery
+                        function appendImage(imageURL, caption) {
+                            //Create elements
+                            let gallery = document.getElementById("gallery");
+                            let anchor = document.createElement("a");
+                            let img = document.createElement("img");
+                            let span = document.createElement("span");
+                            //Assign properties
+                            span.className = "pswp-caption-content pswp__dynamic-caption--below"
+                            span.style = "color:#ffd25a"
+                            span.innerHTML = caption;
+                            img.src = imageURL;
+                            anchor.href = imageURL;
+                            anchor.setAttribute("data-pswp-width", "600");
+                            anchor.setAttribute("data-pswp-height", "384");
+                            anchor.setAttribute("target", "_blank");
+
+                            anchor.appendChild(img);
+                            anchor.appendChild(span);
+                            gallery.appendChild(anchor);
+
+                            console.log(anchor)
+
+                        }
+                    </script>
+                    <script type="module">
+                        // Include Lightbox 
+import PhotoSwipeLightbox from '/webres/photoswipe-lightbox.esm.js';
+import PhotoSwipeDynamicCaption from 'https://unpkg.com/photoswipe-dynamic-caption-plugin/photoswipe-dynamic-caption-plugin.esm.js';
+const lightbox = new PhotoSwipeLightbox({
+  // may select multiple "galleries"
+  gallery: '#gallery',
+
+  // Elements within gallery (slides)
+  children: 'a',
+
+  // setup PhotoSwipe Core dynamic import
+  pswpModule: () => import('/webres/photoswipe.esm.js')
+});
+
+const captionPlugin = new PhotoSwipeDynamicCaption(lightbox, {
+  // Plugins options, for example:
+  type: 'auto',
+});
+
+
+lightbox.init();
+        </script>
+</body>
+
+</html>
